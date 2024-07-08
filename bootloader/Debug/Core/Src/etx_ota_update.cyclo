@@ -1,0 +1,4 @@
+../Core/Src/etx_ota_update.c:32:13:etx_ota_download_and_flash	6
+../Core/Src/etx_ota_update.c:91:20:etx_process_data	5
+../Core/Src/etx_ota_update.c:129:26:write_data_to_flash_app	7
+../Core/Src/etx_ota_update.c:220:17:GetPage	1

@@ -1,0 +1,22 @@
+{
+    "idf.portWin": "COM4",
+    "idf.adapterTargetName": "esp32",
+    "idf.openOcdConfigs": [
+        "interface/ftdi/esp32_devkitj_v1.cfg",
+        "target/esp32.cfg"
+    ],
+    "files.associations": {
+        "netdb.h": "c",
+        "nvs_flash.h": "c",
+        "blue_led.h": "c",
+        "bitset": "c",
+        "i2c_types.h": "c",
+        "i2c.h": "c",
+        "tasks_common.h": "c",
+        "*.tcc": "c",
+        "mpu6050.h": "c",
+        "sdkconfig.h": "c",
+        "aws_iot.h": "c"
+    },
+    "idf.flashType": "UART"
+}
