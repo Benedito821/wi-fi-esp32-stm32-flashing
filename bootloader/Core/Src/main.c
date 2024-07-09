@@ -113,9 +113,6 @@ int main(void)
   MX_USART1_UART_Init();
   MX_LPUART1_UART_Init();
   /* USER CODE BEGIN 2 */
-//  HAL_UARTEx_ReceiveToIdle_DMA(&huart1, Rx_Buffer, sizeof(Rx_Buffer));
-//  __HAL_DMA_DISABLE_IT(&hdma_usart1_rx,DMA_IT_HT);
-
   printf("Bootloader %d.%d start\n",BL_VERSION,BL_PATCH);
   HAL_GPIO_WritePin(LD2_GREEN_GPIO_Port,LD2_GREEN_Pin,GPIO_PIN_SET);
   HAL_Delay(2000);
@@ -135,7 +132,6 @@ int main(void)
         /* Reset to load the new application */
         printf("Firmware update is done!!! Rebooting...\r\n");
         go_to_application();
-//        HAL_NVIC_SystemReset();
       }
 
 //      go_to_application();

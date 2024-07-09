@@ -41,6 +41,7 @@ ETX_OTA_EX_ etx_ota_download_and_flash( void )
 
 	if((ota_fw_total_size = (uint32_t)atoi((char*)Rx_Buffer)) > 0)
 	{
+	  ota_fw_total_size -= 200; //take of the remaining web form
 	  printf("Total file size %ld Bytes\r\n",ota_fw_total_size);
 	  printf("Sending ACK...\r\n");
 	  printf("Waiting for the chunks...\r\n");
@@ -62,8 +63,8 @@ ETX_OTA_EX_ etx_ota_download_and_flash( void )
 		}
 		else
 		{
-			HAL_UART_Receive(&huart1, Rx_Buffer, 642, HAL_MAX_DELAY );//todo: generalize this
-			len = 642;
+			HAL_UART_Receive(&huart1, Rx_Buffer, ota_fw_total_size - ota_fw_received_size, HAL_MAX_DELAY );//todo: generalize this
+			len = ota_fw_total_size - ota_fw_received_size;
 		}
 		if( len <= ETX_OTA_PACKET_MAX_SIZE && len>0)
 		{
@@ -95,10 +96,9 @@ static ETX_OTA_EX_ etx_process_data( uint8_t *buf, uint16_t len )
 	  if( write_data_to_flash_app( buf, len, ( ota_fw_received_size == 0) ) == HAL_OK )
 	  {
 
-			if( ota_fw_received_size >= 19028 )//todo: generalize this
-
-//			if( ota_fw_received_size >= ota_fw_total_size )
+			if( ota_fw_received_size >= ota_fw_total_size )
 			{
+			  printf("[%ld/%ld]\r\n", ota_fw_received_size/ETX_OTA_DATA_MAX_SIZE, ota_fw_total_size/ETX_OTA_DATA_MAX_SIZE);
 			  ota_state = ETX_OTA_STATE_END;
 			  return ret = ETX_OTA_EX_OK;
 			}
@@ -133,19 +133,21 @@ static HAL_StatusTypeDef write_data_to_flash_app( uint8_t *data,
   HAL_StatusTypeDef ret;
   uint64_t data_temp = 0;
   uint32_t FirstPage = 0, NbOfPages = 0;
+  int i;
 
   do
   {
     ret = HAL_FLASH_Unlock();
     if( ret != HAL_OK )
     {
-      break;
+    	printf("Flash unlock Error\r\n");
+    	break;
     }
 
-    //No need to erase every time. Erase only the first time.
-    if( is_first_block )
+    if( is_first_block ) //No need to erase every time.
     {
        ota_state = ETX_OTA_STATE_FLASHING;
+
        printf("Erasing the Flash memory...\r\n");
 
        __HAL_FLASH_CLEAR_FLAG(FLASH_FLAG_OPTVERR);
@@ -173,8 +175,7 @@ static HAL_StatusTypeDef write_data_to_flash_app( uint8_t *data,
       printf("Flash memory successfuly erased...\r\n");
     }
 
-//    ota_fw_received_size += data_len;
-    for(int i = 0; i <= data_len-8; i += 8 )
+    for( i = 0; i <= data_len-8; i += 8 )
     {
       data_temp = (uint64_t)data[i+7]<<56 |
     		  	  (uint64_t)data[i+6]<<48 |
@@ -201,15 +202,37 @@ static HAL_StatusTypeDef write_data_to_flash_app( uint8_t *data,
       }
     }
 
-    if( ret != HAL_OK )
+    if(data_len%8 != 0 && is_the_last_chunk == true)
     {
-      break;
+    	uint8_t cnt1 = 0;
+    	for(int cnt = i,cnt1 = 0; cnt<data_len;cnt++,cnt1++)
+    	{
+    		data_temp = data_temp | ((uint64_t)data[cnt]<<cnt1*8);
+    	}
+
+        ret = HAL_FLASH_Program( FLASH_TYPEPROGRAM_DOUBLEWORD,
+                                 (ETX_APP_FLASH_ADDR + ota_fw_received_size),
+    							   data_temp
+                               );
+
+        if( ret == HAL_OK )
+        {
+          //update the data count
+        ota_fw_received_size += (data_len-i);
+        }
+        else
+        {
+          printf("Flash Write Error\r\n");
+          break;
+        }
     }
 
     ret = HAL_FLASH_Lock();
+
     if( ret != HAL_OK )
     {
-      break;
+    	printf("Flash lock Error\r\n");
+    	break;
     }
 
   }while( false );
