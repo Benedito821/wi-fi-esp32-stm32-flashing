@@ -22,6 +22,8 @@
 #include "stm32wbxx_it.h"
 /* Private includes ----------------------------------------------------------*/
 /* USER CODE BEGIN Includes */
+#include "etx_ota_update.h"
+#include "string.h"
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -51,10 +53,18 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-
+volatile uint32_t dma_cnt;
+extern volatile uint16_t wr_idx ;
+extern  volatile uint8_t Rx_Buffer[ETX_OTA_DATA_MAX_SIZE];
+extern  volatile uint8_t temp_Buffer[2*ETX_OTA_DATA_MAX_SIZE];
+extern ETX_OTA_STATE_ ota_state;
+extern DMA_HandleTypeDef hdma_memtomem_dma1_channel2;
+te_received_dma_half dma_rec_half = FIRST_HALF;
 /* USER CODE END 0 */
 
 /* External variables --------------------------------------------------------*/
+extern DMA_HandleTypeDef hdma_memtomem_dma1_channel2;
+extern DMA_HandleTypeDef hdma_usart1_rx;
 extern UART_HandleTypeDef hlpuart1;
 extern UART_HandleTypeDef huart1;
 /* USER CODE BEGIN EV */
@@ -200,12 +210,58 @@ void SysTick_Handler(void)
 /******************************************************************************/
 
 /**
+  * @brief This function handles DMA1 channel1 global interrupt.
+  */
+void DMA1_Channel1_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel1_IRQn 0 */
+
+  /* USER CODE END DMA1_Channel1_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_usart1_rx);
+  /* USER CODE BEGIN DMA1_Channel1_IRQn 1 */
+
+  /* USER CODE END DMA1_Channel1_IRQn 1 */
+}
+
+/**
+  * @brief This function handles DMA1 channel2 global interrupt.
+  */
+void DMA1_Channel2_IRQHandler(void)
+{
+  /* USER CODE BEGIN DMA1_Channel2_IRQn 0 */
+
+  /* USER CODE END DMA1_Channel2_IRQn 0 */
+  HAL_DMA_IRQHandler(&hdma_memtomem_dma1_channel2);
+  /* USER CODE BEGIN DMA1_Channel2_IRQn 1 */
+
+  /* USER CODE END DMA1_Channel2_IRQn 1 */
+}
+
+/**
   * @brief This function handles USART1 global interrupt.
   */
 void USART1_IRQHandler(void)
 {
   /* USER CODE BEGIN USART1_IRQn 0 */
 
+//	if(__HAL_UART_GET_IT_SOURCE(&huart1,UART_IT_RXNE))
+//	{
+//			temp_Buffer[wr_idx] = huart1.Instance->RDR;
+//			wr_idx++;
+//			if(wr_idx >= ETX_OTA_DATA_MAX_SIZE)
+//			{
+//				wr_idx = 0;
+//				HAL_DMA_Start(&hdma_memtomem_dma1_channel2,(uint32_t)temp_Buffer,(uint32_t)Rx_Buffer,1024);
+//				ota_state = ETX_OTA_STATE_RECEIVED_CHUNK;
+//			}
+//	}
+//	__HAL_UART_DISABLE(&huart1);
+//	__HAL_UART_ENABLE(&huart1);
+//	__HAL_UART_ENABLE_IT(&huart1,UART_IT_RXNE);
+
+//	 HAL_NVIC_DisableIRQ(USART1_IRQn);
+//	 __HAL_UART_CLEAR_FLAG(&huart1,UART_FLAG_RXNE);
+//	 HAL_NVIC_EnableIRQ(USART1_IRQn);
   /* USER CODE END USART1_IRQn 0 */
   HAL_UART_IRQHandler(&huart1);
   /* USER CODE BEGIN USART1_IRQn 1 */
@@ -219,7 +275,6 @@ void USART1_IRQHandler(void)
 void LPUART1_IRQHandler(void)
 {
   /* USER CODE BEGIN LPUART1_IRQn 0 */
-
   /* USER CODE END LPUART1_IRQn 0 */
   HAL_UART_IRQHandler(&hlpuart1);
   /* USER CODE BEGIN LPUART1_IRQn 1 */
@@ -228,5 +283,29 @@ void LPUART1_IRQHandler(void)
 }
 
 /* USER CODE BEGIN 1 */
+void HAL_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart)
+{
+	if(huart == &huart1)
+	{
+//		strcpy(Rx_Buffer,temp_Buffer);
+		HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel2,(uint32_t)temp_Buffer,(uint32_t)Rx_Buffer,ETX_OTA_DATA_MAX_SIZE);
+//		HAL_DMA_Init(&hdma_memtomem_dma1_channel2);
+		ota_state = ETX_OTA_STATE_RECEIVED_CHUNK;
+		dma_rec_half = FIRST_HALF;
+//		dma_cnt = hdma_usart1_rx.Instance->CNDTR;
+	}
+}
 
+void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
+{
+	if(huart == &huart1)
+	{
+//		strcpy(Rx_Buffer,temp_Buffer+1024);
+		HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel2,(uint32_t)(temp_Buffer+ETX_OTA_DATA_MAX_SIZE),(uint32_t)Rx_Buffer,ETX_OTA_DATA_MAX_SIZE);
+//		HAL_DMA_Init(&hdma_memtomem_dma1_channel2);
+		ota_state = ETX_OTA_STATE_RECEIVED_CHUNK;
+		dma_rec_half = SECOND_HALF;
+//		dma_cnt = hdma_usart1_rx.Instance->CNDTR;
+	}
+}
 /* USER CODE END 1 */

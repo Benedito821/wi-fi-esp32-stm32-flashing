@@ -1,3 +1,4 @@
+"./Core/Src/dma.o"
 "./Core/Src/etx_ota_update.o"
 "./Core/Src/gpio.o"
 "./Core/Src/main.o"
