@@ -20,7 +20,6 @@
 #include "Wifi_app.h"
 #include "sntp_time_sync.h"
 
-char ota_buff[1024];
 //Tag used for ESP serial console messages
 static const char TAG[] = "http_server";
 
@@ -214,8 +213,7 @@ static esp_err_t http_server_favicon_ico_handler(httpd_req_t *req)
 esp_err_t http_server_OTA_update_handler(httpd_req_t *req)
 {
     esp_ota_handle_t ota_handle;
-    char ota_buff_1st_chunk[1178];
-    // char ota_buff[1024];
+    char ota_buff[1024];
     int content_length = req->content_len;
     int content_received = 0;
     int recv_len;
@@ -224,21 +222,11 @@ esp_err_t http_server_OTA_update_handler(httpd_req_t *req)
     char uart_temp[10] = {'\0'};
     char ack_arr[6] = {'\0'};
 
-    const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
+     const esp_partition_t *update_partition = esp_ota_get_next_update_partition(NULL);
     do
     {
-        if (!is_req_body_started)
-		{
-            recv_len = httpd_req_recv(req,ota_buff_1st_chunk,MIN(content_length,sizeof(ota_buff_1st_chunk)));
-        }
-        else{
-            recv_len = httpd_req_recv(req,ota_buff,MIN(content_length,sizeof(ota_buff)));
-        }
-
-
-
         //read data for the request
-        if(recv_len < 0)
+        if((recv_len = httpd_req_recv(req,ota_buff,MIN(content_length,sizeof(ota_buff)))) < 0)
         {
             //check if timeout occured
             if(recv_len == HTTPD_SOCK_ERR_TIMEOUT)
@@ -256,102 +244,87 @@ esp_err_t http_server_OTA_update_handler(httpd_req_t *req)
 		{
 			is_req_body_started = true;
 			// Get the location of the .bin file content (remove the web form data)
-			char *body_start_p = strstr(ota_buff_1st_chunk, "\r\n\r\n") + 4;
-			int body_part_len = recv_len - (body_start_p - ota_buff_1st_chunk);
+			char *body_start_p = strstr(ota_buff, "\r\n\r\n") + 4;
+			int body_part_len = recv_len - (body_start_p - ota_buff);
 
-            printf("http_server_OTA_update_handler: body_part_len: %d , recv_len: %d , ota_buff:%p , body_start_p:%p\r\n", body_part_len,recv_len,ota_buff_1st_chunk,body_start_p);
+            printf("http_server_OTA_update_handler: body_part_len: %d , recv_len: %d , ota_buff:%p , body_start_p:%p\r\n", body_part_len,recv_len,ota_buff,body_start_p);
 
-            printf("http_server_OTA_update_handler: OTA file size: %d\r\n", content_length);
+            content_length = content_length - (body_start_p - ota_buff);
+            
+            printf("http_server_OTA_update_handler: OTA file size: %d\r\n", content_length); //we take off the remaining web data
 
             sprintf(uart_temp,"%d",content_length);
+
             printf("Sending OTA file size...\r\n");
+
             uart_write_bytes(UART_NUM_2,  uart_temp, sizeof(uart_temp));
 
-            //memset(uart_temp,'\0',sizeof(uart_temp));
 
-            uart_read_bytes(UART_NUM_2, ack_arr,sizeof(ack_arr), pdMS_TO_TICKS(500));
-
-            //char *tmp = strstr(uart_temp, "ACK_");
+            uart_read_bytes(UART_NUM_2, ack_arr,sizeof(ack_arr), pdMS_TO_TICKS(1000));
 
             printf("ST board response: %s\r\n",ack_arr);
 
 
-            esp_err_t err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &ota_handle);
+             esp_err_t err = esp_ota_begin(update_partition, OTA_SIZE_UNKNOWN, &ota_handle);
 
-			if (err != ESP_OK)
-			{
-				printf("http_server_OTA_update_handler: Error with OTA begin, cancelling OTA\r\n");
-				return ESP_FAIL;
-			}
-			else
-			{
-				printf("http_server_OTA_update_handler: Writing to partition subtype %d at offset 0x%lx\r\n", update_partition->subtype, update_partition->address);
-			}
+			// if (err != ESP_OK)
+			// {
+			// 	printf("http_server_OTA_update_handler: Error with OTA begin, cancelling OTA\r\n");
+			// 	return ESP_FAIL;
+			// }
+			// else
+			// {
+			// 	printf("http_server_OTA_update_handler: Writing to partition subtype %d at offset 0x%lx\r\n", update_partition->subtype, update_partition->address);
+			// }
             //Write this first part of the data
 			//esp_ota_write(ota_handle, body_start_p, body_part_len);
             
-           if(!strcmp(ack_arr,"ACK0"))
-            {
+        //    if(!strcmp(ack_arr,"ACK0"))
+        //     {
                 uart_write_bytes(UART_NUM_2, body_start_p,body_part_len);
                 //uart_write_bytes(UART_NUM_0, ota_buff,body_part_len);
                 content_received += body_part_len;
                 printf("first chunk has been sent body_part_len= %d  content_received= %d\r\n",body_part_len,content_received);
-                uart_read_bytes(UART_NUM_2, ack_arr,sizeof(ack_arr), pdMS_TO_TICKS(1000));
-                printf("ST board response: %s\r\n",ack_arr);
+                //uart_read_bytes(UART_NUM_2, ack_arr,sizeof(ack_arr), pdMS_TO_TICKS(2000)); //todo: use a pseudodelay!!
+                vTaskDelay(pdMS_TO_TICKS(2000));
+                //printf("ST board response: %s\r\n",ack_arr);
+
                 memset(ack_arr,'\0',sizeof(ack_arr));
-            }
-            else
-                printf("ST board response: unknown response %s\r\n",ack_arr);
-            
+            // }
+            // else
+            //     printf("ST board response: unknown response %s\r\n",ack_arr);
+       
 			
 
         }
         else
         {
-           uart_read_bytes(UART_NUM_2, ack_arr,sizeof(ack_arr), pdMS_TO_TICKS(1000));
-           if(!strcmp(ack_arr,"ACK0"))
-            {
-                // Write OTA data
-                // esp_ota_write(ota_handle, ota_buff, recv_len);
+           //(UART_NUM_2, ack_arr,sizeof(ack_arr), pdMS_TO_TICKS(2000)); //todo: use a pseudodelay!!
+                 vTaskDelay(pdMS_TO_TICKS(2000));
+                // if(!strcmp(ack_arr,"ACK0"))
+                // {
+                    // Write OTA data
+                    // esp_ota_write(ota_handle, ota_buff, recv_len);
 
-                uart_write_bytes(UART_NUM_2,  ota_buff, recv_len);
-                content_received += recv_len;
-                printf("next chunk has been sent recv_len = %d  content_received= %d\r\n",recv_len,content_received);
-                printf("ST board response: %s\r\n",ack_arr);
-                memset(ack_arr,'\0',sizeof(ack_arr));
-            }
-            else
-                printf("ST board response: unknown response %s\r\n",ack_arr);
+                    uart_write_bytes(UART_NUM_2,  ota_buff, recv_len);
+                    content_received += recv_len;
+                    printf("next chunk has been sent recv_len = %d  content_received= %d\r\n",recv_len,content_received);
+                    //printf("ST board response: %s\r\n",ack_arr);
+                    memset(ack_arr,'\0',sizeof(ack_arr));
+
+               
+                   
+                // }
+                // else
+                //     printf("ST board response: unknown response %s\r\n",ack_arr);
         }
-
     }while(recv_len > 0 && content_received < content_length);
-    if (esp_ota_end(ota_handle) == ESP_OK)
-	{
-		// Lets update the partition
-		if (esp_ota_set_boot_partition(update_partition) == ESP_OK)
-		{
-			const esp_partition_t *boot_partition = esp_ota_get_boot_partition();
-			ESP_LOGI(TAG, "http_server_OTA_update_handler: Next boot partition subtype %d at offset 0x%lx", boot_partition->subtype, boot_partition->address);
-			flash_successful = true;
-		}
-        else
-		{
-			ESP_LOGI(TAG, "http_server_OTA_update_handler: FLASHED ERROR!!!");
-		}
-	}
-	else
-	{
-		ESP_LOGI(TAG, "http_server_OTA_update_handler: esp_ota_end ERROR!!!");
-	}
-    // We won't update the global variables throughout the file, so send the message about the status
-	if (flash_successful) 
-    { 
-        http_server_monitor_send_message(HTTP_MSG_OTA_UPDATE_SUCCESSFUL); 
-    } 
-    else 
-    { 
-        http_server_monitor_send_message(HTTP_MSG_OTA_UPDATE_FAILED); 
-    }
+  
+
+
+
+
+  
 	return ESP_OK;
 }
 

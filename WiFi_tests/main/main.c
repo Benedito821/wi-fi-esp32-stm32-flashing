@@ -14,6 +14,9 @@
 #include "aws_iot.h"
 
 static const char TAG[] = "main";
+ const char uartBuf1[5] = {[0 ... 4]='a'}; 
+ const char uartBuf2[5] = {[0 ... 4]='b'}; 
+ const char uartBuf3[1024] = {[0 ... 1023]='c'}; 
 
 void wifi_application_connected_events(void)
 {
@@ -22,31 +25,21 @@ void wifi_application_connected_events(void)
     // aws_iot_start();
 }
 
-// static void uart_task(void *arg)
-// {
-//     uart_config_t uart_config = {
-//         .baud_rate = 115200,
-//         .data_bits = UART_DATA_8_BITS,
-//         .parity    = UART_PARITY_DISABLE,
-//         .stop_bits = UART_STOP_BITS_1,
-//         .flow_ctrl = UART_HW_FLOWCTRL_DISABLE,
-//         .source_clk = UART_SCLK_DEFAULT,
-//     };
-
-//     ESP_ERROR_CHECK(uart_param_config(UART_NUM_0, &uart_config));
-//     ESP_ERROR_CHECK(uart_set_pin(UART_NUM_0, 35, 34, UART_PIN_NO_CHANGE, UART_PIN_NO_CHANGE));
-//     ESP_ERROR_CHECK(uart_driver_install(UART_NUM_0, 1024, 1024, 0, NULL, 0));
-
-//     const char* uartBuf = "Hi from ESP32\n"; 
-
-//     for(;;)
-//     {
-//         uart_write_bytes(UART_NUM_0,  uartBuf, strlen(uartBuf));
-
-//         vTaskDelay(1000 / portTICK_PERIOD_MS);
-        
-//     }
-// }
+static void uart_task(void *arg)
+{
+    for(;;)
+    {
+        uart_write_bytes(UART_NUM_2,  uartBuf1, sizeof(uartBuf1));
+        printf("uartBuf1 sent\r\n");
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
+        uart_write_bytes(UART_NUM_2,  uartBuf2, sizeof(uartBuf2));
+         printf("uartBuf2 sent\r\n");
+        vTaskDelay(3000 / portTICK_PERIOD_MS);
+        // uart_write_bytes(UART_NUM_2,  uartBuf3, sizeof(uartBuf3));
+        //  printf("uartBuf3 sent\r\n");
+        // vTaskDelay(2000 / portTICK_PERIOD_MS);
+    }
+}
 
 
 
@@ -87,5 +80,6 @@ void app_main(void)
     // Set connected event callback
 	wifi_app_set_callback(&wifi_application_connected_events);
 
-    // xTaskCreate(uart_task, "uart_task", 1024, NULL, 10, NULL);
+
+    //xTaskCreate(uart_task, "uart_task", 1024, NULL, 10, NULL);
 }

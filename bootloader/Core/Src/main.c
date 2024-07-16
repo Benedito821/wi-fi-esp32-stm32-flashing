@@ -27,6 +27,7 @@
 /* USER CODE BEGIN Includes */
 #include "stdio.h"
 #include "etx_ota_update.h"
+#include <stdbool.h>
 /* USER CODE END Includes */
 
 /* Private typedef -----------------------------------------------------------*/
@@ -41,15 +42,13 @@ extern DMA_HandleTypeDef hdma_memtomem_dma1_channel2;
 
 /* Private macro -------------------------------------------------------------*/
 /* USER CODE BEGIN PM */
-#define BL_VERSION  2
-#define BL_PATCH 	0
 /* USER CODE END PM */
 
 /* Private variables ---------------------------------------------------------*/
 
 /* USER CODE BEGIN PV */
-extern uint8_t Rx_Buffer[ETX_OTA_PACKET_MAX_SIZE];
-extern uint8_t temp_Buffer[2*ETX_OTA_DATA_MAX_SIZE];
+extern uint8_t Rx_Buffer[ETX_OTA_CHUNK_MAX_SIZE];
+extern uint8_t temp_Buffer[2*ETX_OTA_CHUNK_MAX_SIZE];
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -57,6 +56,7 @@ void SystemClock_Config(void);
 void PeriphCommonClock_Config(void);
 /* USER CODE BEGIN PFP */
 static void go_to_application(void);
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -72,14 +72,31 @@ int fputc(int ch,FILE *f)
 }
 
 static void go_to_application(void){
-	printf("Starting the application  ...\n");
+
+	printf("Starting the application ...\n");
 
 	void (*app_reset_handler)(void) = (void*) (*(volatile uint32_t*)(0x08040000 + 4));
 
 	HAL_GPIO_WritePin(LD2_GREEN_GPIO_Port,LD2_GREEN_Pin,GPIO_PIN_RESET);
 
 	app_reset_handler(); //call the app reset handler
+}
 
+bool is_flash_empty(uint32_t start_addr,uint32_t end_addr)
+{
+	uint32_t  Address = start_addr,
+			   data32 = 0xFFFF;
+	while (Address < end_addr)
+	{
+	    data32 = *(__IO uint32_t *)Address;
+
+	    if (data32 != 0xFFFF)
+	    {
+	      return false;
+	    }
+	    Address += 4;
+	}
+	return true;
 }
 /* USER CODE END 0 */
 
@@ -90,6 +107,9 @@ static void go_to_application(void){
 int main(void)
 {
   /* USER CODE BEGIN 1 */
+  GPIO_PinState OTA_Pin_state = GPIO_PIN_SET;
+  GPIO_PinState launch_App_Pin_state = GPIO_PIN_SET;
+  _Bool Is_flash_empty = true;
   /* USER CODE END 1 */
 
   /* MCU Configuration--------------------------------------------------------*/
@@ -117,31 +137,47 @@ int main(void)
   MX_USART1_UART_Init();
   MX_LPUART1_UART_Init();
   /* USER CODE BEGIN 2 */
-//  __HAL_UART_ENABLE_IT(&huart1,UART_IT_RXNE);
-//  HAL_UART_Receive_DMA(&huart1, temp_Buffer, sizeof(temp_Buffer));
+  printf("Bootloader start success\n");
 
-  printf("Bootloader %d.%d start\n",BL_VERSION,BL_PATCH);
-  HAL_GPIO_WritePin(LD2_GREEN_GPIO_Port,LD2_GREEN_Pin,GPIO_PIN_SET);
-//  HAL_Delay(2000);
-//
-//////  while( HAL_GPIO_ReadPin(B1_GPIO_Port, B1_Pin) != GPIO_PIN_RESET )
-////    {}
-      printf("Starting Firmware Download!!!\r\n");
-      /* OTA Request. Receive the data from the UART4 and flash */
-      if( etx_ota_download_and_flash() != ETX_OTA_EX_OK )
-      {
-        /* Error. Don't process. */
-        printf("OTA Update : ERROR!!! HALT!!!\r\n");
-        while( 1 );
-      }
-      else
-      {
-        /* Reset to load the new application */
-        printf("Firmware update is done!!! Rebooting...\r\n");
-        go_to_application();
-      }
+  if( (Is_flash_empty = is_flash_empty(FLASH_USER_START_ADDR,FLASH_USER_END_ADDR) ) == false)
+  {
+	  printf("App found on memmory.\n"
+			  "Please, press SW1 to start an OTA update or SW3 to run the app...\n");
+  }
+  else
+  {
+	  printf("App not found. Please, press SW1 to start an OTA update...\n");
+  }
 
-//      go_to_application();
+  do
+    {
+	  OTA_Pin_state = HAL_GPIO_ReadPin(B1_GPIO_Port,B1_Pin);
+	  launch_App_Pin_state = HAL_GPIO_ReadPin(B3_GPIO_Port,B3_Pin);
+      if(OTA_Pin_state == GPIO_PIN_RESET  || launch_App_Pin_state == GPIO_PIN_RESET )
+      {
+        break;
+      }
+   }while(1);
+
+
+  if(OTA_Pin_state == GPIO_PIN_RESET)
+  {
+	  printf("Starting Firmware Download...\r\n");
+	  if( etx_ota_download_and_flash() != ETX_OTA_EX_OK )
+	  {
+		printf("OTA Update error. Halting...\r\n");
+		while(1);
+	  }
+	  else
+	  {
+		printf("Firmware update success!\r\n");
+		go_to_application();
+	  }
+  }
+  else if(launch_App_Pin_state == GPIO_PIN_RESET && Is_flash_empty == false)
+  {
+	  go_to_application();
+  }
   /* USER CODE END 2 */
 
   /* Infinite loop */

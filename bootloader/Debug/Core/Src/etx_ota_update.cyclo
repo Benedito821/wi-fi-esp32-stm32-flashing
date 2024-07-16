@@ -1,5 +1,4 @@
-../Core/Src/etx_ota_update.c:38:13:etx_ota_download_and_flash	6
-../Core/Src/etx_ota_update.c:129:20:etx_process_data	5
-../Core/Src/etx_ota_update.c:172:26:write_data_to_flash_app	11
-../Core/Src/etx_ota_update.c:284:17:GetPage	1
-../Core/Src/etx_ota_update.c:289:13:clear_Rx_buffers	2
+../Core/Src/etx_ota_update.c:33:13:etx_ota_download_and_flash	6
+../Core/Src/etx_ota_update.c:98:20:etx_process_data	5
+../Core/Src/etx_ota_update.c:144:26:write_data_to_flash_app	11
+../Core/Src/etx_ota_update.c:258:17:GetPage	1

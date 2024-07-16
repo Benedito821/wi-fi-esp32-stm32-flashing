@@ -6,19 +6,13 @@
 #include <stdlib.h>
 #include <math.h>
 
-/* Buffer to hold the received data */
-uint8_t Rx_Buffer[ETX_OTA_DATA_MAX_SIZE] = {0};
-uint8_t temp_Buffer[2*ETX_OTA_DATA_MAX_SIZE] = {0};
-extern DMA_HandleTypeDef hdma_usart1_rx;
-/* OTA State */
-uint16_t wr_idx = 0;
-uint16_t rd_idx = 0;
+
+uint8_t Rx_Buffer[ETX_OTA_CHUNK_MAX_SIZE] = {0};
+uint8_t temp_Buffer[2*ETX_OTA_CHUNK_MAX_SIZE] = {0};
 ETX_OTA_STATE_ ota_state = ETX_OTA_STATE_IDLE;
 extern te_received_dma_half dma_rec_half;
-/* Firmware Total Size that we are going to receive */
-static uint32_t ota_fw_total_size;
-/* Firmware Size that we have received */
 static uint32_t ota_fw_received_size = 0;
+static uint32_t ota_fw_total_size  = 0;
 bool is_the_first_chunk = true;
 bool is_the_last_chunk = false;
 uint32_t max_num_of_chunks = 0;
@@ -27,53 +21,44 @@ volatile uint16_t uart1_buf_current_size = 0;
 
 static ETX_OTA_EX_ etx_process_data( uint8_t *buf, uint16_t len );
 static HAL_StatusTypeDef write_data_to_flash_app( uint8_t *data,
-                                        uint16_t data_len, bool is_full_image );
+                                              uint16_t data_len,
+										   bool is_full_image );
 static uint32_t GetPage(uint32_t Addr);
-static void clear_Rx_buffers(void);
+
 /**
   * @brief Download the application from UART and flash it.
   * @param None
-  * @retval ETX_OTA_EX_
+  * @retval ETX_OTA_EX_OK if no error, otherwise ETX_OTA_EX_ERR
   */
 ETX_OTA_EX_ etx_ota_download_and_flash( void )
 {
 	ETX_OTA_EX_ ret = ETX_OTA_EX_OK;
 	uint16_t len = 0;
-
 	char* ota_response[2] = {"ACK0","NACK"} ;
 
-	printf("Reading the file size ...\r\n");
+	printf("Reading the file size...\r\n");
 
 	HAL_UART_Receive(&huart1, Rx_Buffer, 10, HAL_MAX_DELAY );
 
-
-
-
-
 	if((ota_fw_total_size = (uint32_t)atoi((char*)Rx_Buffer)) > 0)
 	{
-		max_num_of_chunks =  (uint32_t)floor((double)((float)ota_fw_total_size/ETX_OTA_DATA_MAX_SIZE));
-	  printf("Total file size %ld Bytes\r\n",ota_fw_total_size);
+	  max_num_of_chunks =  (uint32_t)floor((double)((float)ota_fw_total_size/ETX_OTA_CHUNK_MAX_SIZE));
+	  printf("Total file size %ld + 46 Bytes\r\n",ota_fw_total_size-46); //46 bytes of file end boundary web mark
 	  printf("Sending ACK...\r\n");
-	  HAL_UART_Transmit(&huart1, (uint8_t *)ota_response[0], sizeof(ota_response[0]), 100 );//send the ACK
+	  HAL_UART_Transmit(&huart1, (uint8_t *)ota_response[0], sizeof(ota_response[0]), 1000 );//send the ACK
 	  printf("Waiting for the chunks...\r\n");
-
-//	  __HAL_UART_ENABLE_IT(&huart1,UART_IT_RXNE);
 
 	  HAL_UART_Receive_DMA(&huart1, temp_Buffer, sizeof(temp_Buffer));
 
 	  ota_state = ETX_OTA_STATE_AWAITING_CHUNK;
 
-	  //clear_Rx_buffers();
 	}
 	else
 	{
-	  printf("Sending NACK...\r\n");
+	  printf("Zero size file received. Sending NACK...\r\n");
 	  HAL_UART_Transmit(&huart1, (uint8_t *)ota_response[1], sizeof(ota_response[1]), 100 );
 	  return ETX_OTA_EX_ERR;
 	}
-
-
 
 	do
 	{
@@ -81,52 +66,36 @@ ETX_OTA_EX_ etx_ota_download_and_flash( void )
 		{
 			while(ota_state != ETX_OTA_STATE_RECEIVED_CHUNK)
 			{}
-//			HAL_UART_Receive(&huart1, Rx_Buffer, ETX_OTA_PACKET_MAX_SIZE, HAL_MAX_DELAY );
-
 			len = (uint16_t)sizeof(Rx_Buffer);
 		}
 		else
 		{
-			HAL_Delay(2000);
-//			HAL_UART_Receive(&huart1, Rx_Buffer, 596, HAL_MAX_DELAY );
+			HAL_Delay(2000); //wait for the last chunk to be available on dma buffer
 			ota_state = ETX_OTA_STATE_RECEIVED_CHUNK;
 			len = ota_fw_total_size - ota_fw_received_size;
-			  printf("Received chunk of length %d\r\n",len);
+			printf("Received chunk of length %d\r\n",len);
 
-			  if(dma_rec_half == FIRST_HALF)
-				  ret = etx_process_data( temp_Buffer+ETX_OTA_DATA_MAX_SIZE, len );
-			  else
-				  ret = etx_process_data( temp_Buffer, len );
+			if(dma_rec_half == FIRST_HALF)
+				ret = etx_process_data( temp_Buffer+ETX_OTA_CHUNK_MAX_SIZE, len );
+			else
+				ret = etx_process_data( temp_Buffer, len );
 
-			  break;
+			break;
 		}
-
-//		if( len <= ETX_OTA_PACKET_MAX_SIZE && len>0)
-//		{
-		  printf("Received chunk of length %d\r\n",len);
-		  ret = etx_process_data( Rx_Buffer, len );
-//		  memset(Rx_Buffer,'\0',ETX_OTA_PACKET_MAX_SIZE);
-//		  printf("Sending ACK...\r\n");
-//		  HAL_UART_Transmit(&huart1, (uint8_t *)ota_response[0], sizeof(ota_response[1]), 100 );
-
-
-//		}
-//		else
-//		{
-//		  printf("No chunk received!\r\n");
-//		  return ETX_OTA_EX_ERR;
-//		}
+		printf("Received chunk of length %d\r\n",len);
+		ret = etx_process_data( Rx_Buffer, len );
 	}while( ota_state != ETX_OTA_STATE_END );
+
 	return ret;
 }
 
 /**
   * @brief Process the received data from UART1.
   * @param buf buffer to store the received data
-  * @param max_len maximum length to receive
-  * @retval ETX_OTA_EX_
+  * @param len maximum length to receive
+  * @retval ETX_OTA_EX_OK if no error, otherwise ETX_OTA_EX_ERR
   */
-static ETX_OTA_EX_ etx_process_data( uint8_t *buf, uint16_t len )
+static ETX_OTA_EX_ etx_process_data(uint8_t *buf, uint16_t len)
 {
 	  ETX_OTA_EX_ ret = ETX_OTA_EX_ERR;
 
@@ -136,26 +105,23 @@ static ETX_OTA_EX_ etx_process_data( uint8_t *buf, uint16_t len )
 
 			if( ota_fw_received_size >= ota_fw_total_size )
 			{
-			  printf("[%ld/%ld]\r\n", ota_fw_received_size/ETX_OTA_DATA_MAX_SIZE,max_num_of_chunks);
+			  printf("[%ld/%ld]\r\n", ota_fw_received_size/ETX_OTA_CHUNK_MAX_SIZE,max_num_of_chunks);
 			  ota_state = ETX_OTA_STATE_END;
 			  return ret = ETX_OTA_EX_OK;
 			}
 
 
 
-			if(ota_fw_received_size/ETX_OTA_DATA_MAX_SIZE < ota_fw_total_size/ETX_OTA_DATA_MAX_SIZE)
+			if(ota_fw_received_size/ETX_OTA_CHUNK_MAX_SIZE < ota_fw_total_size/ETX_OTA_CHUNK_MAX_SIZE)
 			{
-				printf("[%ld/%ld]\r\n", ota_fw_received_size/ETX_OTA_DATA_MAX_SIZE, max_num_of_chunks);
+				printf("[%ld/%ld]\r\n", ota_fw_received_size/ETX_OTA_CHUNK_MAX_SIZE, max_num_of_chunks);
 				ota_state = ETX_OTA_STATE_AWAITING_CHUNK;
 			}
-			else if(ota_fw_received_size/ETX_OTA_DATA_MAX_SIZE == ota_fw_total_size/ETX_OTA_DATA_MAX_SIZE )
+			else if(ota_fw_received_size/ETX_OTA_CHUNK_MAX_SIZE == ota_fw_total_size/ETX_OTA_CHUNK_MAX_SIZE )
 			{
-				printf("[%ld/%ld]\r\n", ota_fw_received_size/ETX_OTA_DATA_MAX_SIZE, max_num_of_chunks);
+				printf("[%ld/%ld]\r\n", ota_fw_received_size/ETX_OTA_CHUNK_MAX_SIZE, max_num_of_chunks);
 				ota_state = ETX_OTA_STATE_AWAITING_CHUNK;
 				is_the_last_chunk = true;
-
-//				HAL_UART_DMAStop(&huart1);
-//				memset(Rx_Buffer,'\0',sizeof(Rx_Buffer));
 			}
 
 
@@ -168,10 +134,14 @@ static ETX_OTA_EX_ etx_process_data( uint8_t *buf, uint16_t len )
 	  return ret;
 }
 
-
-static HAL_StatusTypeDef write_data_to_flash_app( uint8_t *data,
-                                        	  uint16_t data_len,
-											 bool is_first_block)
+/**
+  * @brief Write data chunk to the flash memory
+  * @param data pointer to the chunk to be flashed
+  * @param data_len chunk length to be flashed
+  * @param is_first_block check variable to clear the memory only once
+  * @retval  HAL_OK, HAL_ERROR, HAL_BUSY,HAL_TIMEOUT
+  */
+static HAL_StatusTypeDef write_data_to_flash_app( uint8_t *data,uint16_t data_len,bool is_first_block)
 {
   HAL_StatusTypeDef ret;
   uint64_t data_temp = 0;
@@ -187,7 +157,7 @@ static HAL_StatusTypeDef write_data_to_flash_app( uint8_t *data,
     	break;
     }
 
-    if( is_first_block ) //No need to erase every time.
+    if(is_first_block) //No need to erase every time.
     {
        ota_state = ETX_OTA_STATE_FLASHING;
 
@@ -199,8 +169,8 @@ static HAL_StatusTypeDef write_data_to_flash_app( uint8_t *data,
 
        NbOfPages = GetPage(FLASH_USER_END_ADDR) - FirstPage + 1;
 
-
        FLASH_EraseInitTypeDef EraseInitStruct;
+
        uint32_t SectorError;
 
        EraseInitStruct.TypeErase       = FLASH_TYPEERASE_PAGES;
@@ -235,7 +205,7 @@ static HAL_StatusTypeDef write_data_to_flash_app( uint8_t *data,
                              );
       if( ret == HAL_OK )
       {
-        ota_fw_received_size += 8;
+        ota_fw_received_size += 8; //we are writting double words
       }
       else
       {
@@ -276,49 +246,16 @@ static HAL_StatusTypeDef write_data_to_flash_app( uint8_t *data,
     	break;
     }
 
-  }while( false );
+  }while(false);
 
   return ret;
 }
 
+/**
+ * @brief Get the order number given a page address
+ * @param Addr memory address for the page
+ * @retval page order uint32_t number */
 static uint32_t GetPage(uint32_t Addr)
 {
   return (Addr - FLASH_BASE) / FLASH_PAGE_SIZE;;
 }
-
-static void clear_Rx_buffers(void)
-{
-	for(int cnt = 0;cnt<= ETX_OTA_DATA_MAX_SIZE;cnt++)
-	{
-		Rx_Buffer[cnt] = '\0';
-		temp_Buffer[cnt] = '\0';
-	}
-	wr_idx = 0;
-}
-//static get_fifo_data(const uint8_t* temp_Buffer)
-//{
-//	if(rd_idx < wr_idx)
-//	{
-//		while(rd_idx <= wr_idx)
-//		{
-//			Rx_Buffer[rd_idx] = temp_Buffer[rd_idx];
-//			rd_idx++;
-//		}
-//	}
-//	else if(rd_idx > wr_idx)
-//	{
-//		while(rd_idx <= ETX_OTA_PACKET_MAX_SIZE)
-//		{
-//			Rx_Buffer[rd_idx] = temp_Buffer[rd_idx];
-//			rd_idx++;
-//		}
-//		//todo: set ota state
-//		rd_idx = 0;
-//		while(rd_idx <= wr_idx)
-//		{
-//			Rx_Buffer[rd_idx] = temp_Buffer[rd_idx];
-//			rd_idx++;
-//		}
-//	}
-//
-//}

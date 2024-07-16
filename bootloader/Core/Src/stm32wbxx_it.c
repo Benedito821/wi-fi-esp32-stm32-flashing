@@ -53,10 +53,8 @@
 
 /* Private user code ---------------------------------------------------------*/
 /* USER CODE BEGIN 0 */
-volatile uint32_t dma_cnt;
-extern volatile uint16_t wr_idx ;
-extern  volatile uint8_t Rx_Buffer[ETX_OTA_DATA_MAX_SIZE];
-extern  volatile uint8_t temp_Buffer[2*ETX_OTA_DATA_MAX_SIZE];
+extern  volatile uint8_t Rx_Buffer[ETX_OTA_CHUNK_MAX_SIZE];
+extern  volatile uint8_t temp_Buffer[2*ETX_OTA_CHUNK_MAX_SIZE];
 extern ETX_OTA_STATE_ ota_state;
 extern DMA_HandleTypeDef hdma_memtomem_dma1_channel2;
 te_received_dma_half dma_rec_half = FIRST_HALF;
@@ -243,25 +241,6 @@ void DMA1_Channel2_IRQHandler(void)
 void USART1_IRQHandler(void)
 {
   /* USER CODE BEGIN USART1_IRQn 0 */
-
-//	if(__HAL_UART_GET_IT_SOURCE(&huart1,UART_IT_RXNE))
-//	{
-//			temp_Buffer[wr_idx] = huart1.Instance->RDR;
-//			wr_idx++;
-//			if(wr_idx >= ETX_OTA_DATA_MAX_SIZE)
-//			{
-//				wr_idx = 0;
-//				HAL_DMA_Start(&hdma_memtomem_dma1_channel2,(uint32_t)temp_Buffer,(uint32_t)Rx_Buffer,1024);
-//				ota_state = ETX_OTA_STATE_RECEIVED_CHUNK;
-//			}
-//	}
-//	__HAL_UART_DISABLE(&huart1);
-//	__HAL_UART_ENABLE(&huart1);
-//	__HAL_UART_ENABLE_IT(&huart1,UART_IT_RXNE);
-
-//	 HAL_NVIC_DisableIRQ(USART1_IRQn);
-//	 __HAL_UART_CLEAR_FLAG(&huart1,UART_FLAG_RXNE);
-//	 HAL_NVIC_EnableIRQ(USART1_IRQn);
   /* USER CODE END USART1_IRQn 0 */
   HAL_UART_IRQHandler(&huart1);
   /* USER CODE BEGIN USART1_IRQn 1 */
@@ -287,12 +266,10 @@ void HAL_UART_RxHalfCpltCallback(UART_HandleTypeDef *huart)
 {
 	if(huart == &huart1)
 	{
-//		strcpy(Rx_Buffer,temp_Buffer);
-		HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel2,(uint32_t)temp_Buffer,(uint32_t)Rx_Buffer,ETX_OTA_DATA_MAX_SIZE);
-//		HAL_DMA_Init(&hdma_memtomem_dma1_channel2);
+		HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel2,(uint32_t)temp_Buffer,(uint32_t)Rx_Buffer,ETX_OTA_CHUNK_MAX_SIZE);
 		ota_state = ETX_OTA_STATE_RECEIVED_CHUNK;
 		dma_rec_half = FIRST_HALF;
-//		dma_cnt = hdma_usart1_rx.Instance->CNDTR;
+		HAL_GPIO_TogglePin(LD2_GREEN_GPIO_Port,LD2_GREEN_Pin);
 	}
 }
 
@@ -300,12 +277,10 @@ void HAL_UART_RxCpltCallback(UART_HandleTypeDef *huart)
 {
 	if(huart == &huart1)
 	{
-//		strcpy(Rx_Buffer,temp_Buffer+1024);
-		HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel2,(uint32_t)(temp_Buffer+ETX_OTA_DATA_MAX_SIZE),(uint32_t)Rx_Buffer,ETX_OTA_DATA_MAX_SIZE);
-//		HAL_DMA_Init(&hdma_memtomem_dma1_channel2);
+		HAL_DMA_Start_IT(&hdma_memtomem_dma1_channel2,(uint32_t)(temp_Buffer+ETX_OTA_CHUNK_MAX_SIZE),(uint32_t)Rx_Buffer,ETX_OTA_CHUNK_MAX_SIZE);
 		ota_state = ETX_OTA_STATE_RECEIVED_CHUNK;
 		dma_rec_half = SECOND_HALF;
-//		dma_cnt = hdma_usart1_rx.Instance->CNDTR;
+		HAL_GPIO_TogglePin(LD2_GREEN_GPIO_Port,LD2_GREEN_Pin);
 	}
 }
 /* USER CODE END 1 */
