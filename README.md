@@ -1,5 +1,5 @@
 # Instructions
-OTA flashing an STM32 board using a web server running on an ESP32 board. The system block diagram is presented in the section "Scheme".
+OTA flashing an STM32 board using a web server running on an ESP32 board. The system block diagram is presented in the section "Diagram".
 
 The UART parameters are 115200/8/1/N. 
 
@@ -15,13 +15,13 @@ To get started
 
 1. Flash the slave board with the bootloader project
 2. Flash the ESP32 with the web-server project
-3. Connect the slave board to the ESP32 via UART according to the scheme
+3. Connect the slave board to the ESP32 via UART according to the Diagram
 4. On a PC/mobile phone connect to the stota wifi network
 5. On the PC or mobile phone go to the browser and browse for 192.168.0.1 (a tab named STM OTA update should open up)
 6. On the GUI select the .bin file from the device and click on update firmware 
 
 Additional debugging interfaces through UART are available both for the ESP32 and ST boards.
 
-# System scheme
+# System Diagram
 
-![](https://github.com/Benedito821/wi-fi-esp32-stm32-flashing/blob/master/scheme.jpg)
+![](https://github.com/Benedito821/wi-fi-esp32-stm32-flashing/blob/master/Diagram.jpg)
