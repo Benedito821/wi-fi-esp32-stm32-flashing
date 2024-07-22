@@ -52,7 +52,8 @@ Mkfile.old
 dkms.conf
 
 
-Debug
+main_app/Debug
+bootloader/Debug
 build
 sdkconfig.old
 /web-server/main/certs/aws_root_ca_pem
