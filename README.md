@@ -24,4 +24,4 @@ Additional debugging interfaces through UART are available both for the ESP32 an
 
 # System scheme
 
-![](https://github.com/Benedito821/wi-fi-esp32-stm32-flashing/blob/master/scheme.png)
+![](https://github.com/Benedito821/wi-fi-esp32-stm32-flashing/blob/master/scheme.jpg)
